@@ -1,23 +1,19 @@
-import json
 import sys
-
 import requests
 import re
+import urllib.parse as urlparse
 from bs4 import BeautifulSoup
 from fastapi import FastAPI
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 app = FastAPI()
 
 PROVIDER = {
-    "base_url": "https://in.linkedin.com/jobs/search",
+    "base_url": "https://linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search",
     "keyword": "keywords",
     "location": "location",
-    "page_number": "pageNum",
-    "limit": {
-        "param": "count",
-        "value": 25
-    },
     "date_posted": "f_TP",
     "job_type": "f_JT",
     "level": "f_E"
@@ -74,15 +70,15 @@ async def linkedin_search_jobs(request: JobSearch):
 def find_linkedin_jobs(request):
     start = 0
     jobs = []
-    offset = 25
-    page = 0
 
-    while start < offset:
+    while True:
 
-        url = PROVIDER['base_url'] + '?' + PROVIDER['keyword'] + '=' + str(request.search_term) \
-              + '&' + PROVIDER['location'] + '=' + request.location \
-              + '&' + PROVIDER['page_number'] + '=0' \
-              + '&start=26'
+        location = "Remote" if request.remote else request.location
+
+        url = PROVIDER['base_url'] + '?' + PROVIDER['keyword'] + '=' + urlparse.quote(request.search_term) \
+            + '&' + PROVIDER['location'] + '=' + location \
+            + '&trk=public_jobs_jobs-search-bar_search-submit' \
+            + '&start=' + str(start)
 
         if request.date_posted in GRANULARITIES.keys():
             url += '&' + PROVIDER['date_posted'] + '=' + GRANULARITIES[request.date_posted]
@@ -102,6 +98,9 @@ def find_linkedin_jobs(request):
 
         text = source.text
 
+        if text.__len__().__eq__(0):
+            break
+
         to_crawl = BeautifulSoup(text, "lxml")
         job_title = to_crawl.findAll('h3', {'class': 'result-card__title job-result-card__title'})
 
@@ -114,11 +113,13 @@ def find_linkedin_jobs(request):
         time = to_crawl.findAll('time', {'class': 'job-result-card__listdate'})
 
         keywords_list = request.search_term.split()
-        print(keywords_list)
 
-        index = 0
         for link1, link2, link3, link4, link5 in zip(job_title, company_name, location, time, job_url):
-            index += 1
+            if request.remote:
+                y = link1.text.lower()
+                if 'remote' not in y:
+                    continue
+
             counter = 0
             for x in keywords_list:
                 y = link1.text.lower()
@@ -130,10 +131,10 @@ def find_linkedin_jobs(request):
                 "{0:.2f}".format(float(float(counter) / float(len(request.search_term.split())))))
             data_dict['searchKeywords'] = str(len(request.search_term.split()))
             data_dict['keywordsMatches'] = str(counter)
+
             data_dict['title'] = link1.text
             data_dict['url'] = link5['href']
 
-            # https://www.linkedin.com/jobs/view/motion-graphic-designer-at-forthnet-1689655674?refId=b6e07afc-a8df-4b4b-a9a0-f3b92a81d8f6&position=18&pageNum=0&trk=guest_job_search_job-result-card_result-card_full-click&originalSubdomain=gr
             job_url = data_dict['url']
             if job_url:
                 v = job_url.find('view/')
@@ -143,17 +144,13 @@ def find_linkedin_jobs(request):
                     if x > -1:
                         data_dict['jobId'] = job_url[v:x]
 
-            try:
-                data_dict['company'] = link2['a'].text
-            except Exception:
-                data_dict['company'] = link2.text
+            data_dict['company'] = link2['a'].text
 
             data_dict['provider'] = "Linkedin"
             data_dict['location'] = link3.text
 
             days_string = link4.text.split(" ")
             num_days = 0
-
             if days_string[1] == "weeks" or days_string[1] == "week":
                 num_days = int(days_string[0]) * 7
             elif days_string[1] == "month" or days_string[1] == "months":
@@ -167,7 +164,7 @@ def find_linkedin_jobs(request):
 
             if str(request.get_description) == "1":
                 try:
-                    source_new = get_request(link5["href"])
+                    source_new = get_request(data_dict['url'])
                 except Exception as e:
                     print('{}')
                     sys.stderr.write(str(e))
@@ -183,15 +180,12 @@ def find_linkedin_jobs(request):
 
                 job_desc = divs[0]
                 data_dict['summary'] = job_desc.text
-                # dataDict['summaryhtml'] = str(job_desc)
 
                 email_in_description = re.findall(r'[\w.-]+@[\w.-]+', job_desc.text)
                 data_dict['emailInSummary'] = email_in_description
-            # ======================================================
-            # add the job
             jobs.append(data_dict)
-        page += 1
         start += 25
 
-    print(json.dumps(jobs, indent=2))
     print(jobs.__len__())
+    json_compatible_item_data = jsonable_encoder(jobs)
+    return JSONResponse(content=json_compatible_item_data)
