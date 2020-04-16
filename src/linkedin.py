@@ -144,7 +144,10 @@ def find_linkedin_jobs(request):
                     if x > -1:
                         data_dict['jobId'] = job_url[v:x]
 
-            data_dict['company'] = link2['a'].text
+            try:
+                data_dict['company'] = link2['a'].text
+            except Exception:
+                data_dict['company'] = link2.text
 
             data_dict['provider'] = "Linkedin"
             data_dict['location'] = link3.text

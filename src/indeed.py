@@ -2,7 +2,6 @@ import sys
 import requests
 import re
 import urllib.parse as urlparse
-from urllib.parse import parse_qs
 import pycountry
 from bs4 import BeautifulSoup
 from fastapi import FastAPI
@@ -13,13 +12,13 @@ from pydantic import BaseModel
 app = FastAPI()
 
 PROVIDER = {
-    "base_url": "https://indeed.com/jobs",
-    "base_url_A": "https://%(iso_code).indeed.com/jobs",
-    "base_url_B": "https://indeed.%(iso_code)/jobs",
-    "base_url_C": "https://indeed.co.%(iso_code)/jobs",
+    "base_url": "https://indeed.com",
+    "base_url_A": "https://%s.indeed.com",
+    "base_url_B": "https://indeed.%s",
+    "base_url_C": "https://indeed.co.%s",
     "keyword": "q",
     "location": "!",
-    "limit": "50",
+    "limit": 50,
     "date_posted": "fromage",
     "job_type": "jt"
 }
@@ -87,10 +86,10 @@ def find_indeed_jobs(request):
 
     while current_page <= total_page_number:
 
-        url = base_url % {"iso_code": iso_code} \
+        url = base_url % iso_code + "/jobs" \
               + '?' + PROVIDER['keyword'] + '=' + urlparse.quote(request.search_term) \
               + '&' + PROVIDER['location'] + '=' + request.location \
-              + '&limit=' + PROVIDER['limit'] \
+              + '&limit=' + str(PROVIDER['limit']) \
               + '&start=' + str(start)
 
         if request.date_posted in GRANULARITIES.keys():
@@ -110,12 +109,10 @@ def find_indeed_jobs(request):
 
         to_crawl = BeautifulSoup(text, "lxml")
 
-        total_results_num = to_crawl.find('div', {'id': 'searchCountPages'}).text.split([3])
-        total_page_number = total_results_num // total_results_num
+        total_results_num = to_crawl.find('div', {'id': 'searchCountPages'}).text.split()[3].replace('.', '')
+        total_page_number = int(total_results_num) // 50
 
-        job_title = to_crawl.findAll('h2', {'class': 'title'})
-
-        job_url = to_crawl.findAll('a', {'class': 'jobtitle turnstileLink'})
+        job_info = to_crawl.findAll('a', {'class': 'jobtitle turnstileLink'})
 
         company_name = to_crawl.findAll('span', {'class': 'company'})
 
@@ -125,7 +122,7 @@ def find_indeed_jobs(request):
 
         keywords_list = request.search_term.split()
 
-        for link1, link2, link3, link4, link5 in zip(job_title, company_name, location, time, job_url):
+        for link1, link2, link3, link4 in zip(job_info, company_name, location, time):
             if request.remote:
                 y = link1.text.lower()
                 if 'remote' not in y:
@@ -143,30 +140,17 @@ def find_indeed_jobs(request):
             data_dict['searchKeywords'] = str(len(request.search_term.split()))
             data_dict['keywordsMatches'] = str(counter)
 
-            data_dict['title'] = link1.text
-            data_dict['url'] = link5['href']
+            data_dict['title'] = link1['title']
+            data_dict['url'] = base_url % iso_code + link1['href']
 
-            job_url = data_dict['url']
+            # parsed = urlparse.urlparse(job_url)
+            # data_dict['jobId'] = parse_qs(parsed.query)['jk']
 
-            parsed = urlparse.urlparse(job_url)
-            data_dict['jobId'] = parse_qs(parsed.query)['jk']
-
-            data_dict['company'] = link2.text
+            data_dict['company'] = link2.text.strip()
             data_dict['provider'] = "Indeed"
             data_dict['location'] = link3.text
 
-            days_string = link4.text.split(" ")
-            num_days = 0
-            if days_string[1] == "weeks" or days_string[1] == "week":
-                num_days = int(days_string[0]) * 7
-            elif days_string[1] == "month" or days_string[1] == "months":
-                num_days = int(days_string[0]) * 30
-            elif days_string[1] == "hours" or days_string[1] == "minutes":
-                num_days = 0
-            elif days_string[1] == "days":
-                num_days = int(days_string[0])
-            data_dict['postDate'] = link4['datetime']
-            data_dict['numDaysAgo'] = str(num_days)
+            data_dict['postDate'] = link4.text
 
             if str(request.get_description) == "1":
                 try:
@@ -199,7 +183,7 @@ def find_indeed_jobs(request):
 
 
 def get_iso_code(country):
-    return pycountry.countries.get(name=country.title()).alpha_2
+    return pycountry.countries.get(name=country.title()).alpha_2.lower()
 
 
 def get_base_url(iso_code):
