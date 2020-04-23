@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from torrequest import TorRequest
 
 app = FastAPI()
 
@@ -84,7 +85,14 @@ def find_indeed_jobs(request):
     if request.remote:
         request.search_term = "Remote " + request.search_term
 
+    proxy_port = 9050
+    ctrl_port = 9051
+    password = "PASSWORD"
+
     while current_page <= total_page_number:
+
+        # with TorRequest(proxy_port=proxy_port, ctrl_port=ctrl_port, password=password) as tr:
+        #     tr.reset_identity()
 
         url = base_url % iso_code + "/jobs" \
               + '?' + PROVIDER['keyword'] + '=' + urlparse.quote(request.search_term) \

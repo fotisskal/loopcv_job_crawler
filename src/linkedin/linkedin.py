@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from torrequest import TorRequest
 
 app = FastAPI()
 
@@ -71,7 +72,14 @@ def find_linkedin_jobs(request):
     start = 0
     jobs = []
 
+    proxy_port = 9050
+    ctrl_port = 9051
+    password = "PASSWORD"
+
     while True:
+
+        # with TorRequest(proxy_port=proxy_port, ctrl_port=ctrl_port, password=password) as tr:
+        #     tr.reset_identity()
 
         location = "Remote" if request.remote else request.location
 

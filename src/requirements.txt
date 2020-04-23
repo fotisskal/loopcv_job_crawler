@@ -1,4 +1,9 @@
 requests
 bs4
+pycountry
 torrequest
 lxml
+fastapi
+uvicorn
+pydantic
+torrequest
