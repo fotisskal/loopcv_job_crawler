@@ -1,9 +1,13 @@
 # JOB CRAWLER
 
 - Inside loopcv_job_crawler:
-    - docker build --tag loopcvJobCrawler:1.0 .
+    - docker build -f Dockerfile.indeed --tag IndeedJobCrawler:1.0 .
     
-    - docker run --publish 8000:8080 8000:8000 --detach --name jc loopcvJobCrawler:1.0
+    - docker build -f Dockerfile.linkedin --tag LinkedinJobCrawler:1.0 .
+    
+    - docker run --publish 8000:8000 --detach --name jc IndeedJobCrawler:1.0
+    
+    - docker run --publish 8000:8000 --detach --name jc LinkedinJobCrawler:1.0
     
  - Hit browser: http://127.0.0.1:8000/docs
 

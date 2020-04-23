@@ -7,9 +7,8 @@ COPY commands.sh ./
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/indeed .
 COPY src/linkedin .
 
-EXPOSE 8000 8080
+EXPOSE 8000
 
-CMD ["./commands.sh"]
+CMD ["uvicorn", "linkedin:app", "--port", "8000", "--reload"]
